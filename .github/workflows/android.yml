@@ -1,0 +1,135 @@
+# Облачная сборка mdplayer.apk.
+# Запускается сама после каждой загрузки файлов в репозиторий, а также кнопкой
+# Actions → «Сборка mdplayer.apk» → Run workflow.
+# Готовый APK появляется в разделе Releases и в Artifacts этой сборки.
+
+name: Сборка mdplayer.apk
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # сохранить ключ подписи и опубликовать APK в Releases
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+env:
+  NODEJS_MOBILE: v18.20.4          # Node.js для Android: https://github.com/nodejs-mobile/nodejs-mobile/releases
+  NDK_VERSION: 26.1.10909125
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Получить код
+        uses: actions/checkout@v4
+
+      - name: Node.js 18 (той же версии, что внутри APK)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Проверить, что сервер mdplayer запускается
+        run: |
+          for f in server.js lib/*.js public/js/*.js; do node --check "$f"; done
+          node server.js --port 8090 > /tmp/server.log 2>&1 &
+          SERVER_PID=$!
+          for i in $(seq 1 20); do
+            curl -fs http://127.0.0.1:8090/api/state > /dev/null && break
+            sleep 1
+          done
+          curl -fs http://127.0.0.1:8090/api/state > /dev/null || { cat /tmp/server.log; exit 1; }
+          kill $SERVER_PID
+          rm -rf data config.json
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK, NDK и CMake
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" --install "platforms;android-34" "build-tools;34.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1" > /dev/null
+
+      - name: Скачать Node.js для Android (nodejs-mobile)
+        run: |
+          curl -fsSL -o /tmp/nodejs-mobile.zip \
+            "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/$NODEJS_MOBILE/nodejs-mobile-$NODEJS_MOBILE-android.zip"
+          rm -rf /tmp/nodejs-mobile && unzip -q /tmp/nodejs-mobile.zip -d /tmp/nodejs-mobile
+          echo "Содержимое архива:"; find /tmp/nodejs-mobile -maxdepth 4 | head -40
+
+          LIB=android/app/libnode
+          rm -rf "$LIB" && mkdir -p "$LIB/include" "$LIB/bin"
+          NODE_H=$(find /tmp/nodejs-mobile -name node.h -path '*include/node/*' | head -1)
+          test -n "$NODE_H" || { echo "В архиве нет include/node/node.h"; exit 1; }
+          cp -r "$(dirname "$NODE_H")" "$LIB/include/node"
+          for ABI in armeabi-v7a arm64-v8a; do
+            SO=$(find /tmp/nodejs-mobile -path "*/$ABI/libnode.so" | head -1)
+            test -n "$SO" || { echo "В архиве нет libnode.so для $ABI"; exit 1; }
+            mkdir -p "$LIB/bin/$ABI" && cp "$SO" "$LIB/bin/$ABI/"
+          done
+          ls -la "$LIB/bin"/*
+
+      - name: Упаковать mdplayer (сервер и интерфейс) в APK
+        run: |
+          DEST=android/app/src/main/assets/nodejs-project
+          rm -rf "$DEST" && mkdir -p "$DEST"
+          cp -r server.js package.json lib public "$DEST/"
+          test -f "$DEST/public/vendor/hls.min.js" || \
+            curl -fsSL -o "$DEST/public/vendor/hls.min.js" https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js
+          find "$DEST" -type f | sort
+
+      # Один и тот же ключ нужен, чтобы новые версии ставились поверх старой (без удаления настроек).
+      # При первой сборке ключ создаётся и сохраняется в репозиторий: android/keystore/mdplayer.jks
+      - name: Ключ подписи APK
+        run: |
+          KS=android/keystore/mdplayer.jks
+          if [ ! -f "$KS" ]; then
+            mkdir -p android/keystore
+            keytool -genkeypair -keystore "$KS" -alias mdplayer -keyalg RSA -keysize 2048 -validity 36500 \
+              -storepass mdplayer -keypass mdplayer -dname "CN=mdplayer"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$KS"
+            git commit -m "Ключ подписи APK [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}" || echo "::warning::Не удалось сохранить ключ — следующую версию придётся ставить после удаления старой"
+          fi
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Собрать APK
+        run: gradle -p android assembleRelease --no-daemon --stacktrace -PndkVersion=$NDK_VERSION
+
+      - name: Переименовать в mdplayer.apk
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk mdplayer.apk
+          ls -la mdplayer.apk
+
+      - name: Сохранить APK в Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdplayer-apk
+          path: mdplayer.apk
+
+      - name: Опубликовать APK в Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: mdplayer, сборка ${{ github.run_number }}
+          body: |
+            APK для Android 7–14 (в том числе Android 8). Скачайте **mdplayer.apk** ниже и установите на телефон.
+            Termux для этой версии не нужен.
+          files: mdplayer.apk
+          make_latest: true
