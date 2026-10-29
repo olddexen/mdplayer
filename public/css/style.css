@@ -1,0 +1,439 @@
+/*
+ * mdplayer — стили интерфейса.
+ * Только давно поддерживаемые возможности: flexbox, без CSS-переменных, grid и gap.
+ * Работает в Chrome / WebView начиная с Android 4.4.
+ */
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; padding: 0; }
+
+body {
+  background: #0e1116;
+  color: #e6e8eb;
+  font-family: Roboto, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+button, input, select { font-family: inherit; font-size: inherit; color: inherit; }
+button { cursor: pointer; }
+.hidden { display: none !important; }
+
+/* ---------- Каркас: телефон в портретной ориентации ---------- */
+
+.app {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.top { flex: none; }
+
+.panel {
+  flex: 1 1 0%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-channels .epg,
+.tab-epg .side { display: none; }
+
+/* ---------- Плеер ---------- */
+
+.player-box {
+  position: relative;
+  width: 100%;
+  height: 0;
+  padding-top: 56.25%;           /* 16:9 */
+  background: #000;
+}
+
+.player-box video {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  color: #fff;
+  pointer-events: none;          /* не мешаем нажимать на кнопки самого плеера */
+}
+
+.overlay-idle,
+.overlay-error,
+.overlay-tap { background: rgba(0, 0, 0, 0.65); }
+.overlay-tap { pointer-events: auto; cursor: pointer; }
+.overlay .btn { pointer-events: auto; margin-top: 12px; }
+.overlay-text { max-width: 90%; font-size: 14px; text-shadow: 0 1px 2px #000; }
+
+.spinner {
+  display: none;
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  -webkit-animation: spin 0.9s linear infinite;
+  animation: spin 0.9s linear infinite;
+}
+.overlay-loading .spinner { display: block; }
+
+@-webkit-keyframes spin {
+  from { -webkit-transform: rotate(0deg); }
+  to { -webkit-transform: rotate(360deg); }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- Строка «что смотрим» ---------- */
+
+.nowbar {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 4px 0 10px;
+  background: #161b22;
+  border-bottom: 1px solid #222a33;
+}
+
+.now-logo {
+  flex: none;
+  width: 44px;
+  height: 32px;
+  margin-right: 10px;
+  object-fit: contain;
+}
+
+.now-info { flex: 1; min-width: 0; cursor: pointer; }
+.now-title,
+.now-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-title { font-weight: bold; }
+.now-sub { font-size: 13px; color: #9aa4af; }
+
+.badge {
+  flex: none;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #d93f3f;
+  color: #fff;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+/* ---------- Кнопки и поля ---------- */
+
+.btn {
+  display: inline-block;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid #2f3742;
+  border-radius: 8px;
+  background: #212833;
+  color: #e6e8eb;
+  font-size: 15px;
+}
+.btn:active { background: #2a3340; }
+.btn[disabled] { opacity: 0.5; }
+.btn-primary { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.btn-primary:active { background: #2f6fd8; }
+.btn-small { flex: none; height: 32px; padding: 0 10px; margin-left: 8px; font-size: 13px; }
+
+.icon-btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #c9d1d9;
+  font-size: 20px;
+  line-height: 44px;
+  text-align: center;
+}
+.icon-btn:active { background: #2a313c; }
+
+.input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid #2a323d;
+  border-radius: 8px;
+  background: #0b0e12;
+  color: #e6e8eb;
+  font-size: 16px;
+  -webkit-appearance: none;
+}
+.input:focus { outline: none; border-color: #3b82f6; }
+
+/* ---------- Вкладки (только на телефоне) ---------- */
+
+.tabs {
+  display: flex;
+  background: #161b22;
+  border-bottom: 1px solid #222a33;
+}
+
+.tab {
+  flex: 1;
+  height: 44px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #9aa4af;
+  font-size: 15px;
+}
+.tab.active { color: #fff; border-bottom-color: #3b82f6; }
+.tab-icon { flex: none; width: 56px; font-size: 18px; }
+
+/* ---------- Категории, дни, списки ---------- */
+
+.side-top { display: none; }
+.brand { flex: 1; font-weight: bold; font-size: 17px; }
+
+.chips {
+  flex: none;
+  position: relative;
+  padding: 8px 8px 6px;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.chips::-webkit-scrollbar { display: none; }
+
+.chip {
+  display: inline-block;
+  vertical-align: top;
+  height: 34px;
+  padding: 0 14px;
+  margin-right: 6px;
+  border: 0;
+  border-radius: 17px;
+  background: #1f2630;
+  color: #c9d1d9;
+  font-size: 14px;
+}
+.chip.active { background: #3b82f6; color: #fff; }
+
+.search-box { flex: none; padding: 0 8px 8px; }
+
+.list {
+  flex: 1 1 0%;
+  min-height: 0;
+  position: relative;           /* чтобы offsetTop строк считался от списка */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.empty { padding: 28px 16px; text-align: center; color: #8b949e; }
+.note { padding: 10px 14px; font-size: 13px; color: #8b949e; border-bottom: 1px solid #1a2027; }
+
+/* ---------- Строка канала ---------- */
+
+.ch {
+  display: flex;
+  align-items: center;
+  min-height: 62px;
+  padding: 8px 2px 8px 10px;
+  border-bottom: 1px solid #1a2027;
+  cursor: pointer;
+}
+.ch:active { background: #18202a; }
+.ch.active { background: #172338; box-shadow: inset 3px 0 0 #3b82f6; }
+
+.ch-logo {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 40px;
+  margin-right: 10px;
+  border-radius: 6px;
+  background: #1b2129;
+  overflow: hidden;
+}
+.ch-logo img { max-width: 100%; max-height: 100%; }
+.ch-initials { font-size: 14px; font-weight: bold; color: #7d8794; }
+
+.ch-body { flex: 1; min-width: 0; }
+.ch-name,
+.ch-prog { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-prog { margin-top: 1px; font-size: 13px; color: #8b949e; }
+
+.bar {
+  height: 3px;
+  margin-top: 5px;
+  border-radius: 2px;
+  background: #262e38;
+  overflow: hidden;
+}
+.bar i { display: block; width: 0; height: 100%; background: #3b82f6; }
+
+.ch-side { flex: none; display: flex; align-items: center; margin-left: 4px; }
+.ch-archive { font-size: 12px; color: #3fb37f; white-space: nowrap; }
+
+.star {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: #59636e;
+  font-size: 20px;
+}
+.star.on { color: #f5b301; }
+
+/* ---------- Программа передач ---------- */
+
+.pr {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 10px 10px 12px;
+  border-bottom: 1px solid #1a2027;
+}
+.pr-time { flex: none; width: 52px; color: #8b949e; }
+.pr-body { flex: 1; min-width: 0; }
+.pr-desc { margin-top: 4px; font-size: 13px; color: #8b949e; }
+.pr-mark { flex: none; margin-left: 8px; font-size: 12px; color: #3fb37f; white-space: nowrap; }
+
+.pr.past .pr-title { color: #aab3bd; }
+.pr.future .pr-title,
+.pr.past.no-archive .pr-title { color: #68717c; }
+.pr.archive { cursor: pointer; }
+.pr.archive:active { background: #18202a; }
+.pr.live { background: #161f2c; box-shadow: inset 3px 0 0 #d93f3f; }
+.pr.live .pr-title { color: #fff; }
+.pr.live .pr-mark { color: #ff7b7b; }
+.pr.playing { background: #14261d; box-shadow: inset 3px 0 0 #3fb37f; }
+.pr.playing .pr-mark { color: #3fb37f; }
+
+/* ---------- Настройки ---------- */
+
+.settings {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.65);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.settings-box {
+  max-width: 560px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 12px 16px 24px;
+  background: #161b22;
+}
+
+.settings-head { display: flex; align-items: center; }
+.settings-head h2 { flex: 1; margin: 0; font-size: 20px; }
+
+.hint { margin: 6px 0; font-size: 13px; color: #8b949e; }
+.field { margin: 14px 0; }
+.label { margin-bottom: 6px; font-size: 14px; color: #c9d1d9; }
+.radio { display: inline-block; margin-right: 20px; padding: 6px 0; }
+.radio input { margin: 0 6px 0 0; vertical-align: -2px; }
+
+.check { display: flex; align-items: flex-start; margin: 16px 0; font-size: 14px; }
+.check input { flex: none; width: 20px; height: 20px; margin: 0 10px 0 0; }
+
+.buttons { margin: 14px 0 0; }
+.buttons .btn { margin: 0 8px 8px 0; }
+
+.error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #3a1d1f;
+  color: #ffb4b4;
+  font-size: 14px;
+}
+
+.status {
+  margin-top: 18px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0f1318;
+  font-size: 13px;
+  word-wrap: break-word;
+}
+.status-row { margin: 3px 0; color: #aab3bd; }
+.status-row b { font-weight: normal; color: #e6e8eb; }
+.status-row.bad { color: #ff9b9b; }
+
+@media (min-width: 600px) {
+  .settings-box { min-height: 0; margin: 32px auto; border-radius: 12px; }
+}
+
+/* ---------- Планшет, компьютер, телефон боком: каналы слева, плеер и программа справа ---------- */
+
+@media (min-width: 800px), (orientation: landscape) and (min-width: 560px) {
+  .side {
+    display: flex !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 300px;
+    border-right: 1px solid #222a33;
+  }
+  .top,
+  .epg { margin-left: 300px; }
+  .epg { display: flex !important; }
+  .tabs { display: none; }
+  .side-top {
+    display: flex;
+    align-items: center;
+    flex: none;
+    height: 52px;
+    padding: 0 4px 0 12px;
+    border-bottom: 1px solid #222a33;
+  }
+  .player-box { height: 56vh; padding-top: 0; }
+}
+
+/* телефон боком: экран низкий — узкая колонка каналов и плеер пониже, чтобы осталось место программе
+   (min-width нужен, чтобы правило не сработало в портрете при открытой клавиатуре) */
+@media (orientation: landscape) and (max-height: 500px) and (min-width: 560px) {
+  .side { width: 260px; }
+  .top,
+  .epg { margin-left: 260px; }
+  .player-box { height: 50vh; }
+  .nowbar { height: 48px; }
+  .side-top { height: 44px; }
+}
+
+@media (min-width: 1200px) {
+  .side { width: 360px; }
+  .top,
+  .epg { margin-left: 360px; }
+  .player-box { height: 62vh; }
+}

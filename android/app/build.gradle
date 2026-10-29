@@ -1,0 +1,79 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Номер сборки GitHub Actions — чтобы новый APK ставился поверх старого (настройки сохраняются).
+def buildNumber = Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+
+android {
+    namespace 'com.mdplayer.app'
+    compileSdk 34
+    ndkVersion project.findProperty('ndkVersion') ?: '26.1.10909125'
+
+    defaultConfig {
+        applicationId 'com.mdplayer.app'
+        minSdk 24          // Android 7.0+, значит и Android 8
+        targetSdk 34
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_shared'   // libnode.so собран с c++_shared
+            }
+        }
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'      // почти все телефоны на Android 8
+        }
+    }
+
+    // Ключ создаётся workflow при первой сборке и сохраняется в репозитории (android/keystore).
+    signingConfigs {
+        mdplayer {
+            storeFile file('../keystore/mdplayer.jks')
+            storePassword 'mdplayer'
+            keyAlias 'mdplayer'
+            keyPassword 'mdplayer'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.mdplayer
+        }
+        debug {
+            signingConfig signingConfigs.mdplayer
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libnode/bin']           // libnode.so скачивает workflow
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // libnode.so попадает в APK и из jniLibs, и как импортированная библиотека CMake
+            pickFirsts += ['**/libnode.so', '**/libc++_shared.so']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}

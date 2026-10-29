@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#161b22">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>mdplayer</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app" class="app tab-channels">
+
+  <div class="top">
+    <div class="player-box">
+      <video id="video" playsinline webkit-playsinline preload="none"></video>
+      <div id="overlay" class="overlay">
+        <div class="spinner"></div>
+        <div id="overlay-text" class="overlay-text"></div>
+        <button id="overlay-btn" class="btn hidden" type="button">Повторить</button>
+      </div>
+    </div>
+
+    <div class="nowbar">
+      <img id="now-logo" class="now-logo hidden" alt="">
+      <div id="now-info" class="now-info">
+        <div id="now-title" class="now-title">mdplayer</div>
+        <div id="now-sub" class="now-sub">Выберите канал в списке</div>
+      </div>
+      <span id="now-badge" class="badge hidden">● LIVE</span>
+      <button id="btn-live" class="btn btn-small btn-primary hidden" type="button">В эфир</button>
+      <button id="btn-external" class="icon-btn hidden" type="button" title="Открыть во внешнем плеере">↗</button>
+    </div>
+
+    <div id="tabs" class="tabs">
+      <button class="tab" type="button" data-tab="channels">Каналы</button>
+      <button class="tab" type="button" data-tab="epg">Программа</button>
+      <button class="tab tab-icon" type="button" data-tab="settings" title="Настройки">⚙</button>
+    </div>
+  </div>
+
+  <div id="side" class="panel side">
+    <div class="side-top">
+      <div class="brand">mdplayer</div>
+      <button id="side-settings" class="icon-btn" type="button" title="Настройки">⚙</button>
+    </div>
+    <div id="groups" class="chips"></div>
+    <div class="search-box">
+      <input id="search" class="input" type="search" placeholder="Поиск канала" autocomplete="off">
+    </div>
+    <div id="channel-list" class="list"><div class="empty">Загрузка…</div></div>
+  </div>
+
+  <div id="epg" class="panel epg">
+    <div id="days" class="chips"></div>
+    <div id="epg-list" class="list"><div class="empty">Выберите канал, чтобы увидеть программу передач</div></div>
+  </div>
+
+</div>
+
+<div id="settings" class="settings hidden">
+  <div class="settings-box">
+    <div class="settings-head">
+      <h2>Настройки</h2>
+      <button id="settings-close" class="icon-btn" type="button" title="Закрыть">✕</button>
+    </div>
+    <p id="settings-intro" class="hint">
+      Укажите один раз ваш плейлист iEdem TV (Edem / iLook): ссылку из личного кабинета
+      или файл .m3u8. mdplayer запомнит его и будет загружать сам.
+    </p>
+
+    <div class="field">
+      <div class="label">Плейлист</div>
+      <label class="radio"><input type="radio" name="source" value="url" checked> по ссылке</label>
+      <label class="radio"><input type="radio" name="source" value="file"> из файла</label>
+    </div>
+    <div id="field-url" class="field">
+      <input id="cfg-url" class="input" type="url" placeholder="http://…/edem_pl.m3u8" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div id="field-file" class="field hidden">
+      <input id="cfg-file" type="file">
+      <div id="cfg-file-name" class="hint"></div>
+    </div>
+
+    <div class="field">
+      <div class="label">Программа передач (XMLTV), необязательно</div>
+      <input id="cfg-epg" class="input" type="url" placeholder="Автоматически из url-tvg плейлиста" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+
+    <label class="check">
+      <input id="cfg-proxy" type="checkbox" checked>
+      <span>Пропускать потоки через сервер mdplayer (нужно для hls.js, рекомендуется)</span>
+    </label>
+
+    <div class="field">
+      <div class="label">Плеер на этом устройстве</div>
+      <select id="cfg-engine" class="input">
+        <option value="hls">hls.js (рекомендуется)</option>
+        <option value="native">Встроенный HLS браузера</option>
+      </select>
+    </div>
+
+    <div id="settings-error" class="error hidden"></div>
+    <div class="buttons">
+      <button id="settings-save" class="btn btn-primary" type="button">Сохранить</button>
+    </div>
+
+    <div id="settings-status" class="status"></div>
+    <div class="buttons">
+      <button id="refresh-playlist" class="btn" type="button">Обновить плейлист</button>
+      <button id="refresh-epg" class="btn" type="button">Обновить программу</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/hls.min.js"></script>
+<script>window.Hls || document.write('<script src="https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js"><\/script>');</script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/player.js"></script>
+<script src="js/channels.js"></script>
+<script src="js/epg.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
