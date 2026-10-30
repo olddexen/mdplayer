@@ -4,6 +4,8 @@ plugins {
 
 // Номер сборки GitHub Actions — чтобы новый APK ставился поверх старого (настройки сохраняются).
 def buildNumber = Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+// Версия берётся из package.json (workflow передаёт её как -PappVersion)
+def appVersion = project.findProperty('appVersion') ?: '1.1.0'
 
 android {
     namespace 'com.mdplayer.app'
@@ -15,7 +17,7 @@ android {
         minSdk 24          // Android 7.0+, значит и Android 8
         targetSdk 34
         versionCode buildNumber
-        versionName "1.0.${buildNumber}"
+        versionName "${appVersion} (${buildNumber})"
 
         externalNativeBuild {
             cmake {

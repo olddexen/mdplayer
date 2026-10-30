@@ -8,12 +8,15 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -82,6 +85,7 @@ public class MainActivity extends Activity {
         settings.setDomStorageEnabled(true);                  // localStorage: избранное, выбранная группа
         settings.setMediaPlaybackRequiresUserGesture(false);  // канал запускается сразу после выбора
         web.setBackgroundColor(0xFF0E1116);
+        web.addJavascriptInterface(new NativeBridge(), "MDNative");   // жесты плеера: громкость и яркость
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -299,11 +303,65 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** «Назад»: выйти из полноэкранного режима, закрыть окно на странице, иначе свернуть приложение. */
     @Override
     public void onBackPressed() {
-        if (fullscreenView != null) exitFullscreen(true);
-        else if (web.canGoBack()) web.goBack();
-        else moveTaskToBack(true);   // сервер продолжает работать; закрыть — из списка недавних приложений
+        if (fullscreenView != null) {
+            exitFullscreen(true);
+            return;
+        }
+        web.evaluateJavascript("window.MD && MD.back ? MD.back() : false", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String handled) {
+                if ("true".equals(handled)) return;
+                if (web.canGoBack()) web.goBack();
+                else moveTaskToBack(true);   // сервер продолжает работать; закрыть — из списка недавних приложений
+            }
+        });
+    }
+
+    /** Мост для жестов плеера (window.MDNative): системная громкость и яркость экрана, как в MX Player. */
+    private class NativeBridge {
+        private AudioManager audio() {
+            return (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        }
+
+        @JavascriptInterface
+        public float getVolume() {
+            AudioManager am = audio();
+            int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            return max > 0 ? (float) am.getStreamVolume(AudioManager.STREAM_MUSIC) / max : 0f;
+        }
+
+        @JavascriptInterface
+        public void setVolume(float value) {
+            AudioManager am = audio();
+            int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(Math.max(0f, Math.min(1f, value)) * max), 0);
+        }
+
+        @JavascriptInterface
+        public float getBrightness() {
+            float own = getWindow().getAttributes().screenBrightness;
+            if (own >= 0) return own;
+            try {
+                return Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS) / 255f;
+            } catch (Settings.SettingNotFoundException e) {
+                return 0.5f;
+            }
+        }
+
+        @JavascriptInterface
+        public void setBrightness(final float value) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    WindowManager.LayoutParams lp = getWindow().getAttributes();
+                    lp.screenBrightness = Math.max(0.02f, Math.min(1f, value));   // только для mdplayer
+                    getWindow().setAttributes(lp);
+                }
+            });
+        }
     }
 
     @Override

@@ -14,12 +14,70 @@
 <div id="app" class="app tab-channels">
 
   <div class="top">
-    <div class="player-box">
-      <video id="video" playsinline webkit-playsinline preload="none"></video>
-      <div id="overlay" class="overlay">
-        <div class="spinner"></div>
-        <div id="overlay-text" class="overlay-text"></div>
-        <button id="overlay-btn" class="btn hidden" type="button">Повторить</button>
+    <div id="player" class="player">
+      <div id="player-box" class="player-box">
+        <video id="video" playsinline webkit-playsinline preload="none"></video>
+        <div id="dimmer" class="dimmer"></div>
+        <div id="gesture" class="gesture"></div>
+
+        <div id="controls" class="controls ctl-hidden">
+          <div class="ctl-top"><div id="ctl-title" class="ctl-title"></div></div>
+          <div class="ctl-center">
+            <button id="ctl-prev" class="ctl-btn" type="button" title="Предыдущий канал">
+              <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12L18 18V6z"/></svg>
+            </button>
+            <button id="ctl-back" class="ctl-btn" type="button" title="Назад 10 секунд">
+              <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/><text x="12" y="16" font-size="6.5" font-weight="bold" text-anchor="middle" fill="currentColor">10</text></svg>
+            </button>
+            <button id="ctl-play" class="ctl-btn ctl-play" type="button" title="Пауза / воспроизведение">
+              <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              <svg class="icon-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+            </button>
+            <button id="ctl-fwd" class="ctl-btn" type="button" title="Вперёд 10 секунд">
+              <svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7c-3.3 0-6 2.7-6 6s2.7 6 6 6 6-2.7 6-6h2c0 4.4-3.6 8-8 8s-8-3.6-8-8 3.6-8 8-8z"/><text x="12" y="16" font-size="6.5" font-weight="bold" text-anchor="middle" fill="currentColor">10</text></svg>
+            </button>
+            <button id="ctl-next" class="ctl-btn" type="button" title="Следующий канал">
+              <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+            </button>
+          </div>
+          <div class="ctl-bottom">
+            <div id="timeline" class="timeline">
+              <div class="tl-track">
+                <i id="tl-avail" class="tl-avail"></i>
+                <i id="tl-buffer" class="tl-buffer"></i>
+                <i id="tl-progress" class="tl-progress"></i>
+              </div>
+              <div id="tl-thumb" class="tl-thumb"></div>
+              <div id="tl-tip" class="tl-tip hidden"></div>
+            </div>
+            <div class="ctl-row">
+              <span id="ctl-time" class="ctl-time"></span>
+              <span class="ctl-spacer"></span>
+              <button id="ctl-live" class="ctl-chip ctl-live hidden" type="button">● LIVE</button>
+              <button id="ctl-aspect" class="ctl-chip" type="button" title="Масштаб">Оригинал</button>
+              <button id="ctl-fs" class="ctl-btn ctl-small" type="button" title="Во весь экран">
+                <svg class="icon-fs" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7zM5 10h2V7h3V5H5zM17 17h-3v2h5v-5h-2zM14 5v2h3v3h2V5z"/></svg>
+                <svg class="icon-unfs" viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5zM8 8H5v2h5V5H8zM14 19h2v-3h3v-2h-5zM16 8V5h-2v5h5V8z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="osd" class="osd hidden">
+          <div id="osd-text" class="osd-text"></div>
+          <div class="osd-bar"><i id="osd-fill"></i></div>
+        </div>
+
+        <div id="toast" class="toast hidden">
+          <span id="toast-text"></span>
+          <button id="toast-btn" class="toast-btn" type="button"></button>
+        </div>
+
+        <div id="overlay" class="overlay">
+          <div class="spinner"></div>
+          <div id="overlay-text" class="overlay-text"></div>
+          <button id="overlay-btn" class="btn hidden" type="button">Повторить</button>
+        </div>
       </div>
     </div>
 
@@ -31,6 +89,7 @@
       </div>
       <span id="now-badge" class="badge hidden">● LIVE</span>
       <button id="btn-live" class="btn btn-small btn-primary hidden" type="button">В эфир</button>
+      <button id="btn-prev-channel" class="icon-btn hidden" type="button" title="Предыдущий канал">⇄</button>
       <button id="btn-external" class="icon-btn hidden" type="button" title="Открыть во внешнем плеере">↗</button>
     </div>
 
@@ -60,6 +119,33 @@
 
 </div>
 
+<!-- Все категории сеткой -->
+<div id="group-grid" class="sheet hidden">
+  <div class="sheet-box">
+    <div class="sheet-head">
+      <h3>Категории</h3>
+      <button id="group-grid-close" class="icon-btn" type="button" title="Закрыть">✕</button>
+    </div>
+    <div id="group-grid-list" class="grid"></div>
+  </div>
+</div>
+
+<!-- Ручной выбор программы передач для канала -->
+<div id="epg-map" class="sheet hidden">
+  <div class="sheet-box">
+    <div class="sheet-head">
+      <h3>Программа для канала</h3>
+      <button id="epg-map-close" class="icon-btn" type="button" title="Закрыть">✕</button>
+    </div>
+    <p id="epg-map-hint" class="hint"></p>
+    <input id="epg-map-search" class="input" type="search" placeholder="Название канала в программе передач" autocomplete="off">
+    <div id="epg-map-list" class="pick-list"></div>
+    <div class="buttons">
+      <button id="epg-map-auto" class="btn" type="button">Подбирать автоматически</button>
+    </div>
+  </div>
+</div>
+
 <div id="settings" class="settings hidden">
   <div class="settings-box">
     <div class="settings-head">
@@ -86,7 +172,8 @@
 
     <div class="field">
       <div class="label">Программа передач (XMLTV), необязательно</div>
-      <input id="cfg-epg" class="input" type="url" placeholder="Автоматически из url-tvg плейлиста" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <input id="cfg-epg" class="input" type="text" placeholder="Можно несколько ссылок через запятую" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="hint">Дополнительно используются ссылка из плейлиста (url-tvg) и запасной источник.</div>
     </div>
 
     <label class="check">
@@ -112,6 +199,7 @@
       <button id="refresh-playlist" class="btn" type="button">Обновить плейлист</button>
       <button id="refresh-epg" class="btn" type="button">Обновить программу</button>
     </div>
+    <p id="settings-version" class="hint version"></p>
   </div>
 </div>
 
@@ -122,6 +210,7 @@
 <script src="js/player.js"></script>
 <script src="js/channels.js"></script>
 <script src="js/epg.js"></script>
+<script src="js/epgmap.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/app.js"></script>
 </body>

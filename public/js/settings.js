@@ -120,7 +120,11 @@
     } else {
       addRow('Программа', epg.message || 'не загружена', epg.state === 'error');
     }
-    addRow('Источник EPG', epg.url || (epg.sources || []).join(', ') || '—', false);
+    addRow('Источники EPG', (epg.sources || []).join(', ') || '—', false);
+    if (pl.count && epg.state === 'ready' && epg.matched < pl.count) {
+      addRow('', 'Если у канала нет названий передач — откройте «Программа» и нажмите «Выбрать программу вручную».', false);
+    }
+    U.byId('settings-version').textContent = 'mdplayer v' + (state.version || '');
   }
 
   function showError(text) {
@@ -200,5 +204,9 @@
     });
   }
 
-  MD.settings = { init: init, open: open, close: close, updateStatus: updateStatus };
+  function isOpen() {
+    return root.className.indexOf('hidden') === -1;
+  }
+
+  MD.settings = { init: init, open: open, close: close, isOpen: isOpen, updateStatus: updateStatus };
 })(window, document);

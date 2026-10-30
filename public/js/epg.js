@@ -12,6 +12,8 @@
   var channel = null;
   var programmes = [];     // [[начало, конец, название, описание], ...]
   var note = '';           // пояснение над списком (например, «архив по часам»)
+  var source = '';         // откуда взята программа: «Первый канал (epg.it999.ru)»
+  var manual = false;      // программа выбрана вручную
   var dayKeys = [];
   var dayStarts = {};
   var day = null;
@@ -33,6 +35,10 @@
     });
 
     listEl.addEventListener('click', function (e) {
+      if (U.closestAttr(e.target, 'data-map', listEl)) {
+        if (channel) handlers.onMap(channel);
+        return;
+      }
       var row = U.closestAttr(e.target, 'data-index', listEl);
       if (!row || !channel) return;
       var p = programmes[+row.getAttribute('data-index')];
@@ -54,10 +60,14 @@
     return p[0] < now && p[0] >= now - channel.archive * 86400;
   }
 
+  function minutes(sec) {
+    var m = Math.round(sec / 60);
+    return m < 60 ? m + ' мин' : Math.floor(m / 60) + ' ч' + (m % 60 ? ' ' + (m % 60) + ' мин' : '');
+  }
+
   /** Нет EPG, но есть архив: делим архив на часовые отрезки, чтобы его всё равно можно было смотреть. */
   function hourlySlots(days) {
-    var now = U.now();
-    var d = new Date(now * 1000);
+    var d = new Date(U.now() * 1000);
     d.setMinutes(0, 0, 0);
     var top = Math.floor(d.getTime() / 1000);
     var list = [];
@@ -80,19 +90,21 @@
       day = null;
       programmes = [];
       U.clear(daysEl);
-      message('Загрузка программы…');
+      message('Загрузка программы…', false);
     }
 
     var mySeq = ++seq;
     MD.api.epg(ch.id, function (err, res) {
       if (mySeq !== seq) return;   // пока ждали ответ, выбрали другой канал
       if (err) {
-        if (!programmes.length) message(err.message);
+        if (!programmes.length) message(err.message, false);
         return;
       }
       U.setServerTime(res.now);
       loadedAt = Date.now();
       programmes = res.programmes;
+      source = res.source || '';
+      manual = !!res.manual;
       note = '';
 
       if (!programmes.length) {
@@ -100,11 +112,13 @@
         if (busy) loadedAt = 0;   // перезапросим, когда EPG загрузится
         if (!ch.archive) {
           U.clear(daysEl);
-          message(busy ? 'Программа передач загружается…' : 'Для этого канала нет программы передач');
+          message(busy ? 'Программа передач загружается…' : 'Для этого канала не найдена программа передач.', !busy);
           return;
         }
         programmes = hourlySlots(ch.archive);
-        note = busy ? 'Программа передач загружается — пока архив по часам' : 'Программы передач нет — архив разбит по часам';
+        note = busy
+          ? 'Программа передач загружается — пока архив по часам'
+          : 'Программа для этого канала не найдена — архив разбит по часам. Выберите программу вручную (внизу списка), и здесь появятся названия передач.';
       }
       buildDays();
       renderDays();
@@ -166,25 +180,19 @@
     for (var i = 0; i < programmes.length; i++) {
       if (U.dayKey(programmes[i][0]) === day) frag.appendChild(renderRow(programmes[i], i, now));
     }
+    frag.appendChild(renderFooter());
     U.clear(listEl);
     listEl.appendChild(frag);
     if (scroll) scrollToCurrent();
     else listEl.scrollTop = keep;
   }
 
-  /**
-   * Панель стала видимой. Пока она скрыта (вкладка «Каналы» на телефоне),
-   * прокрутка не работает — поэтому доводим её здесь.
-   */
-  function focus() {
-    scrollDays();
-    scrollToCurrent();
-  }
-
+  /** Строка: «12:00  Comedy Club / до 13:00 · 1 ч», полоска «досмотреть», отметка архива. */
   function renderRow(p, index, now) {
     var live = p[0] <= now && now < p[1];
     var archive = isArchive(p);
     var isPlaying = !!(playing && playing.id === channel.id && playing.start === p[0]);
+    var resumeAt = archive && !isPlaying && handlers.resumeOf ? handlers.resumeOf(channel.id, p[0]) : 0;
     var cls = 'pr ' + (live ? 'live' : p[1] <= now ? 'past' : 'future');
     if (archive) cls += ' archive';
     else if (!live && p[1] <= now) cls += ' no-archive';
@@ -196,30 +204,62 @@
 
     var body = U.el('div', 'pr-body');
     body.appendChild(U.el('div', 'pr-title', p[2]));
-    if (live) {
-      var bar = U.el('div', 'bar');
+    body.appendChild(U.el('div', 'pr-sub', 'до ' + U.fmtTime(p[1]) + ' · ' + minutes(p[1] - p[0]) + (resumeAt ? ' · остановились на ' + U.fmtTime(resumeAt) : '')));
+    if (live || resumeAt) {
+      var bar = U.el('div', 'bar' + (live ? '' : ' resume'));
       var fill = U.el('i');
-      fill.style.width = Math.min(100, (now - p[0]) * 100 / Math.max(1, p[1] - p[0])).toFixed(1) + '%';
+      var pos = live ? now : resumeAt;
+      fill.style.width = Math.min(100, (pos - p[0]) * 100 / Math.max(1, p[1] - p[0])).toFixed(1) + '%';
       bar.appendChild(fill);
       body.appendChild(bar);
     }
     if (p[3] && (live || isPlaying)) body.appendChild(U.el('div', 'pr-desc', p[3]));
     row.appendChild(body);
 
-    var mark = isPlaying ? '▶ смотрите' : live ? (archive ? '↻ с начала' : '● эфир') : archive ? '↻' : '';
+    var mark = isPlaying ? '▶ смотрите' : live ? (archive ? '↻ с начала' : '● эфир') : resumeAt ? '▶ досмотреть' : archive ? '↻' : '';
     if (mark) row.appendChild(U.el('div', 'pr-mark', mark));
     return row;
   }
 
-  function message(text) {
+  /** Внизу: откуда взята программа и кнопка ручного выбора. */
+  function renderFooter() {
+    var footer = U.el('div', 'epg-footer');
+    if (source) footer.appendChild(document.createTextNode('Программа: ' + source + (manual ? ' — выбрана вручную' : '') + ' '));
+    var link = U.el('button', 'link-btn', source ? 'Не та программа?' : 'Выбрать программу вручную');
+    link.type = 'button';
+    link.setAttribute('data-map', '1');
+    footer.appendChild(link);
+    return footer;
+  }
+
+  function message(text, withMapButton) {
     U.clear(listEl);
     listEl.appendChild(U.el('div', 'empty', text));
+    if (withMapButton) listEl.appendChild(renderFooter());
   }
 
   /** Отметить передачу из архива, которую сейчас смотрим (id = null — прямой эфир). */
   function setPlaying(id, start) {
     playing = id ? { id: id, start: start } : null;
     if (channel && programmes.length) renderList(false);
+  }
+
+  /** Передача канала, которая шла в момент ts (если программа этого канала загружена). */
+  function programmeAt(chId, ts) {
+    if (!channel || channel.id !== chId) return null;
+    for (var i = 0; i < programmes.length; i++) {
+      if (programmes[i][0] <= ts && ts < programmes[i][1]) return programmes[i];
+    }
+    return null;
+  }
+
+  /**
+   * Панель стала видимой. Пока она скрыта (вкладка «Каналы» на телефоне),
+   * прокрутка не работает — поэтому доводим её здесь.
+   */
+  function focus() {
+    scrollDays();
+    scrollToCurrent();
   }
 
   /** Раз в минуту: сдвинуть отметку «сейчас», время от времени — перезапросить программу. */
@@ -233,5 +273,13 @@
     if (channel) show(channel, true);
   }
 
-  MD.epg = { init: init, show: show, setPlaying: setPlaying, tick: tick, reload: reload, focus: focus };
+  MD.epg = {
+    init: init,
+    show: show,
+    setPlaying: setPlaying,
+    programmeAt: programmeAt,
+    tick: tick,
+    reload: reload,
+    focus: focus
+  };
 })(window, document);

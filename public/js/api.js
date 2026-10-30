@@ -59,6 +59,8 @@
     channels: function (cb) { get('/api/channels', cb); },
     now: function (cb) { get('/api/now', cb); },
     epg: function (id, cb) { get('/api/epg?ch=' + q(id), cb); },
+    epgSearch: function (text, cb) { get('/api/epg/search?q=' + q(text), cb); },
+    epgMap: function (id, key, cb) { post('/api/epg/map', { ch: id, key: key }, cb); },
     stream: function (id, cb) { get('/api/stream?ch=' + q(id), cb); },
     archive: function (id, start, stop, cb) {
       get('/api/archive?ch=' + q(id) + '&start=' + start + '&stop=' + stop, cb);

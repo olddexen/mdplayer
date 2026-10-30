@@ -9,7 +9,7 @@
   var FAVORITES = '*';     // служебное значение «группы» избранного
   var CHUNK = 60;          // длинный список рисуется порциями по мере прокрутки
 
-  var groupsEl, searchEl, listEl;
+  var groupsEl, searchEl, listEl, gridEl, gridListEl;
   var onSelect = function () {};
   var channels = [];
   var groups = [];
@@ -33,14 +33,27 @@
     listEl = U.byId('channel-list');
 
     groupsEl.addEventListener('click', function (e) {
+      if (U.closestAttr(e.target, 'data-grid', groupsEl)) {
+        openGrid();
+        return;
+      }
       var chip = U.closestAttr(e.target, 'data-group', groupsEl);
-      if (!chip) return;
-      group = chip.getAttribute('data-group');
-      U.storage.set('group', group);
-      searchEl.value = '';
-      query = '';
-      renderGroups(false);
-      applyFilter(0);
+      if (chip) selectGroup(chip.getAttribute('data-group'));
+    });
+
+    gridEl = U.byId('group-grid');
+    gridListEl = U.byId('group-grid-list');
+    U.byId('group-grid-close').addEventListener('click', closeGrid);
+    gridEl.addEventListener('click', function (e) {
+      if (e.target === gridEl) {
+        closeGrid();
+        return;
+      }
+      var item = U.closestAttr(e.target, 'data-group', gridListEl);
+      if (!item) return;
+      closeGrid();
+      selectGroup(item.getAttribute('data-group'));
+      renderGroups(true);
     });
 
     searchEl.addEventListener('input', U.debounce(function () {
@@ -80,9 +93,23 @@
     return false;
   }
 
+  function selectGroup(value) {
+    group = value;
+    U.storage.set('group', group);
+    searchEl.value = '';
+    query = '';
+    renderGroups(false);
+    applyFilter(0);
+  }
+
   function renderGroups(scrollToActive) {
     var scrollLeft = groupsEl.scrollLeft;
     U.clear(groupsEl);
+    var gridChip = U.el('button', 'chip', '☰');
+    gridChip.type = 'button';
+    gridChip.title = 'Все категории';
+    gridChip.setAttribute('data-grid', '1');
+    groupsEl.appendChild(gridChip);
     if (group === FAVORITES || hasFavorites()) addChip(FAVORITES, '★ Избранное');
     addChip(ALL, 'Все');
     for (var i = 0; i < groups.length; i++) addChip(groups[i], groups[i]);
@@ -210,6 +237,60 @@
     if (group === FAVORITES && !query) applyFilter(listEl.scrollTop);
   }
 
+  /** Все категории сеткой — удобнее, чем листать длинную строку. */
+  function openGrid() {
+    var counts = {};
+    var favCount = 0;
+    for (var i = 0; i < channels.length; i++) {
+      counts[channels[i].group] = (counts[channels[i].group] || 0) + 1;
+      if (favorites[channels[i].id]) favCount++;
+    }
+    U.clear(gridListEl);
+    if (favCount) addGridItem(FAVORITES, '★ Избранное', favCount);
+    addGridItem(ALL, 'Все каналы', channels.length);
+    for (var j = 0; j < groups.length; j++) addGridItem(groups[j], groups[j], counts[groups[j]] || 0);
+    U.setVisible(gridEl, true);
+  }
+
+  function addGridItem(value, label, count) {
+    var item = U.el('button', 'grid-item' + (value === group ? ' active' : ''), label);
+    item.type = 'button';
+    item.setAttribute('data-group', value);
+    item.appendChild(U.el('small', null, count + ' кан.'));
+    gridListEl.appendChild(item);
+  }
+
+  function closeGrid() {
+    U.setVisible(gridEl, false);
+  }
+
+  function isGridOpen() {
+    return gridEl.className.indexOf('hidden') === -1;
+  }
+
+  /** Соседний канал (step = ±1) в текущем списке — для кнопок ⏮ ⏭ в плеере. */
+  function neighbor(id, step) {
+    var list = visible.length ? visible : channels;
+    var index = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) {
+        index = i;
+        break;
+      }
+    }
+    if (index === -1) {
+      list = channels;
+      for (var j = 0; j < list.length; j++) {
+        if (list[j].id === id) {
+          index = j;
+          break;
+        }
+      }
+    }
+    if (!list.length) return null;
+    return list[(index + step + list.length) % list.length];
+  }
+
   /** Сообщение вместо списка (ошибка, загрузка). */
   function message(text) {
     visible = [];
@@ -219,5 +300,14 @@
     listEl.appendChild(U.el('div', 'empty', text));
   }
 
-  MD.channels = { init: init, setData: setData, setNow: setNow, setActive: setActive, message: message };
+  MD.channels = {
+    init: init,
+    setData: setData,
+    setNow: setNow,
+    setActive: setActive,
+    message: message,
+    neighbor: neighbor,
+    closeGrid: closeGrid,
+    isGridOpen: isGridOpen
+  };
 })(window, document);
