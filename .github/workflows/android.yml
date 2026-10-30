@@ -35,6 +35,9 @@ jobs:
         with:
           node-version: 18
 
+      - name: Версия из package.json
+        run: echo "APP_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
       - name: Проверить, что сервер mdplayer запускается
         run: |
           for f in server.js lib/*.js public/js/*.js; do node --check "$f"; done
@@ -110,7 +113,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Собрать APK
-        run: gradle -p android assembleRelease --no-daemon --stacktrace -PndkVersion=$NDK_VERSION
+        run: gradle -p android assembleRelease --no-daemon --stacktrace -PndkVersion=$NDK_VERSION -PappVersion=$APP_VERSION
 
       - name: Переименовать в mdplayer.apk
         run: |
@@ -126,10 +129,10 @@ jobs:
       - name: Опубликовать APK в Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: mdplayer, сборка ${{ github.run_number }}
+          tag_name: v${{ env.APP_VERSION }}-build${{ github.run_number }}
+          name: mdplayer v${{ env.APP_VERSION }} (сборка ${{ github.run_number }})
           body: |
-            APK для Android 7–14 (в том числе Android 8). Скачайте **mdplayer.apk** ниже и установите на телефон.
-            Termux для этой версии не нужен.
+            APK для Android 7–14 (в том числе Android 8). Скачайте **mdplayer.apk** ниже и установите на телефон
+            поверх прежней версии — настройки и избранное сохранятся. Termux для этой версии не нужен.
           files: mdplayer.apk
           make_latest: true
