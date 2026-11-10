@@ -13,10 +13,12 @@
   var MD = window.MD;
   var U = MD.util;
 
-  // Настройки hls.js под телефон: умеренный буфер, качество не выше размера плеера.
+  // Настройки hls.js под телефон и ТВ-приставку: умеренный буфер, качество не выше размера плеера.
   var HLS_CONFIG = {
     enableWorker: true,
+    startFragPrefetch: true,       // первый сегмент качается сразу, не дожидаясь разбора плейлиста
     capLevelToPlayerSize: true,
+    nudgeMaxRetry: 6,
     maxBufferLength: 30,
     maxMaxBufferLength: 60,
     maxBufferSize: 40 * 1000 * 1000,
@@ -30,6 +32,12 @@
     fragLoadingMaxRetry: 6
   };
   var MAX_RECOVERIES = 3;
+  var WATCH_MS = 1000;         // сторож зависаний проверяет картинку раз в секунду
+  var STALL_SHOW = 1.5;        // через столько секунд без движения показываем «буферизацию»
+  var STALL_NUDGE = 6;         // …пробуем перескочить дырку в буфере
+  var STALL_RECONNECT = 15;    // …переподключаемся к потоку
+  var START_RECONNECT = 30;    // первый кадр не пришёл за 30 с и загрузка стоит — переподключаемся
+  var BANNER_MS = 4000;
   var HIDE_DELAY = 4000;       // элементы управления прячутся через 4 с
   var SEEK_STEP = 10;          // кнопки и двойное касание: ±10 с
   var SWIPE_SECONDS = 180;     // свайп на всю ширину экрана = 3 минуты
@@ -54,6 +62,12 @@
   var gesture = null;
   var drag = null;             // перетаскивание по таймлайну
   var dimLevel = 0;            // в браузере яркость имитируется затемнением
+  var watch = { t: -1, buf: -1, since: 0, nudged: false, started: false };
+  var suspended = null;        // приложение свёрнуто: { wasPlaying }
+  var reconnects = 0;          // переподключений подряд без единого кадра
+  var reconnecting = false;    // play() вызван сторожем, а не зрителем
+  var MAX_RECONNECTS = 3;
+  var bannerTimer = null;
 
   // ---------- Вспомогательное ----------
 
@@ -100,14 +114,20 @@
     overlayBtn = U.byId('overlay-btn');
     ['gesture', 'dimmer', 'osd', 'osd-text', 'osd-fill', 'ctl-title', 'ctl-play', 'ctl-back', 'ctl-fwd', 'ctl-prev', 'ctl-next',
       'ctl-live', 'ctl-aspect', 'ctl-fs', 'ctl-time', 'timeline', 'tl-avail', 'tl-buffer', 'tl-progress', 'tl-thumb', 'tl-tip',
-      'toast', 'toast-text', 'toast-btn'].forEach(function (id) { els[id] = U.byId(id); });
+      'toast', 'toast-text', 'toast-btn', 'buffering', 'banner', 'banner-logo', 'banner-title', 'banner-sub'].forEach(function (id) { els[id] = U.byId(id); });
 
     video.addEventListener('playing', function () {
       recoveries = 0;
+      reconnects = 0;
+      watch.started = true;
       hideOverlay();
+      setBuffering(false);
       calibrate();
       updatePlayButton();
       scheduleHide();
+    });
+    video.addEventListener('waiting', function () {
+      if (session && watch.started) setBuffering(true);
     });
     video.addEventListener('pause', function () {
       updatePlayButton();
@@ -141,12 +161,21 @@
 
     bindGestures();
     bindTimeline();
-    bindKeyboard();
 
     window.addEventListener('resize', function () { setTimeout(applyAspect, 50); });
     document.addEventListener('fullscreenchange', syncFullscreen);
     document.addEventListener('webkitfullscreenchange', syncFullscreen);
     setInterval(renderTimeline, 1000);   // для эфира таймлайн движется и на паузе
+    setInterval(watchdog, WATCH_MS);
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) suspend();
+      else wake();
+    });
+    if (MD.nav) {
+      MD.nav.setPlayerHandler(handleKey);
+      // элементы управления во весь экран: стрелки ходят только по ним
+      MD.nav.addLayer(function () { return isFullscreen() && controlsVisible() ? controls : null; });
+    }
 
     document.addEventListener('touchend', unlock, true);
     document.addEventListener('click', unlock, true);
@@ -231,8 +260,17 @@
     els['ctl-play'].className = 'ctl-btn ctl-play' + (video.paused ? '' : ' is-playing');
   }
 
+  function resetWatch() {
+    watch.t = -1;
+    watch.buf = -1;
+    watch.since = Date.now();
+    watch.nudged = false;
+    watch.started = false;
+  }
+
   function stopPlayback() {
     session = null;
+    setBuffering(false);
     if (hls) {
       hls.destroy();
       hls = null;
@@ -324,6 +362,10 @@
       lastTick: 0
     };
     recoveries = 0;
+    suspended = null;
+    if (!reconnecting) reconnects = 0;   // новый канал или «Повторить» — счёт сначала
+    reconnecting = false;
+    resetWatch();
     retry = function () { play(url, opts); };
     els['ctl-title'].textContent = opts.title || '';
     showOverlay('loading', '');
@@ -348,7 +390,8 @@
       return;
     }
     renderTimeline();
-    showControls();
+    // во весь экран при переключении каналов хватает плашки — кнопки не закрывают картинку
+    if (!isFullscreen()) showControls();
   }
 
   /** Останавливает поток и показывает крутилку — пока сервер готовит ссылку. */
@@ -790,7 +833,9 @@
       return;
     }
     var request = player.requestFullscreen || player.webkitRequestFullscreen || player.webkitRequestFullScreen;
-    if (!request) {
+    // В приложении окно и так на весь экран: растягиваем плеер сами — так пульт продолжает
+    // управлять страницей (системный полноэкранный режим WebView забирает клавиши себе).
+    if (!request || native) {
       pseudoFullscreen();
       return;
     }
@@ -837,6 +882,11 @@
   function syncFullscreen() {
     if (isFullscreen()) player.classList.add('fs');
     else player.classList.remove('fs');
+    try {
+      if (native && native.setFullscreen) native.setFullscreen(isFullscreen());   // скрыть панели, повернуть телефон
+    } catch (e) {
+      // старая версия приложения без этой функции
+    }
     els['ctl-fs'].className = 'ctl-btn ctl-small' + (isFullscreen() ? ' is-fs' : '');
     setTimeout(applyAspect, 100);
     setTimeout(applyAspect, 500);
@@ -868,19 +918,211 @@
     }, HIDE_DELAY);
   }
 
-  function bindKeyboard() {
-    document.addEventListener('keydown', function (e) {
-      var tag = (e.target && e.target.tagName) || '';
-      if (!session || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-      var key = e.keyCode;
-      if (key === 32) togglePlay();                  // пробел
-      else if (key === 37) seekBy(-SEEK_STEP);       // ←
-      else if (key === 39) seekBy(SEEK_STEP);        // →
-      else if (key === 70) toggleFullscreen();       // F
-      else return;
-      e.preventDefault();
+  function controlsVisible() {
+    return !!session && controls.className.indexOf('ctl-hidden') === -1;
+  }
+
+  // ---------- Сторож зависаний ----------
+
+  function setBuffering(on) {
+    if (els.buffering) U.setVisible(els.buffering, !!on && overlay.getAttribute('data-mode') === '');
+  }
+
+  function bufferedEnd() {
+    var b = video.buffered;
+    return b && b.length ? b.end(b.length - 1) : 0;
+  }
+
+  /**
+   * Раз в секунду: идёт ли картинка. Если время видео стоит, а буфер не растёт —
+   * сначала перескакиваем дырку в буфере, потом переподключаемся сами,
+   * чтобы картинка не висела, пока зритель не переключит канал.
+   */
+  function watchdog() {
+    if (!session || suspended || document.hidden || video.paused || video.seeking || drag) {
+      watch.since = Date.now();
+      return;
+    }
+    var mode = overlay.getAttribute('data-mode');
+    if (mode === 'error' || mode === 'tap') return;
+    var t = video.currentTime;
+    var buf = bufferedEnd();
+    if (t !== watch.t) {                     // картинка идёт
+      watch.t = t;
+      watch.buf = buf;
+      watch.since = Date.now();
+      watch.nudged = false;
+      setBuffering(false);
+      return;
+    }
+    var stuck = (Date.now() - watch.since) / 1000;
+    if (buf > watch.buf + 0.5) {             // данные приходят — просто медленно
+      watch.buf = buf;
+      if (!watch.started) return;
+    }
+    if (!watch.started) {
+      if (stuck > START_RECONNECT) reconnect('Поток не запускается — переподключаемся…');
+      return;
+    }
+    if (stuck > STALL_SHOW) setBuffering(true);
+    if (stuck > STALL_NUDGE && !watch.nudged) {
+      watch.nudged = true;
+      nudge();
+    } else if (stuck > STALL_RECONNECT) {
+      reconnect('Картинка остановилась — переподключаемся…');
+    }
+  }
+
+  /** Перескочить дырку в буфере или перезапустить загрузку. */
+  function nudge() {
+    var b = video.buffered;
+    var t = video.currentTime;
+    for (var i = 0; b && i < b.length; i++) {
+      if (b.start(i) > t + 0.05) {
+        video.currentTime = b.start(i) + 0.1;
+        return;
+      }
+    }
+    if (hls) hls.startLoad();
+  }
+
+  /** Переоткрыть поток: эфир — с эфира, архив — с той же минуты. */
+  function reconnect(text) {
+    if (!session) return;
+    var s = session;
+    if (++reconnects > MAX_RECONNECTS) {   // поток не оживает — не крутимся вечно, ждём зрителя
+      fail('Поток не отвечает. Проверьте интернет или выберите другой канал.', retry);
+      return;
+    }
+    toast(text);
+    reconnecting = true;
+    if (!s.live && s.baseVt !== null && handlers.onRestart) handlers.onRestart(Math.floor(position()));
+    else if (retry) retry();
+  }
+
+  // ---------- Приложение свёрнуто / развёрнуто ----------
+
+  /** Свернули: останавливаем загрузку, чтобы не тратить трафик и память. */
+  function suspend() {
+    if (!session || suspended) return;
+    suspended = { wasPlaying: !video.paused };
+    pause();
+    if (hls) hls.stopLoad();
+  }
+
+  /** Вернулись: эфир — снова с эфира (за время паузы он ушёл вперёд), архив — с того же места. */
+  function wake() {
+    if (!suspended) return;
+    var s = suspended;
+    suspended = null;
+    if (!session || !s.wasPlaying) {
+      if (hls && session) hls.startLoad();
+      return;
+    }
+    if (session.live && retry) {
+      retry();
+      return;
+    }
+    if (hls) hls.startLoad();
+    watch.since = Date.now();
+    tryPlay();
+  }
+
+  // ---------- Пульт ----------
+
+  function isTextTarget(e) {
+    var tag = (e.target && e.target.tagName) || '';
+    return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  }
+
+  /**
+   * Клавиши пульта и клавиатуры. true — клавиша обработана плеером.
+   * Во весь экран (кнопки скрыты): ↑/↓ — каналы, ←/→ — перемотка, OK — показать кнопки.
+   * Когда кнопки видны, стрелки ходят по ним (MD.nav), OK нажимает кнопку.
+   */
+  function handleKey(e) {
+    var k = e.keyCode;
+    if (isTextTarget(e)) return false;
+    if (session) {
+      if (k === 179 || k === 415 || k === 19 || (k === 32 && !e.repeat)) {   // Play/Pause, Play, Pause, пробел
+        if (k === 415) tryPlay();
+        else if (k === 19) pause();
+        else togglePlay();
+        showControls();
+        return true;
+      }
+      if (k === 227 || k === 412) { seekBy(-SEEK_STEP * 3); return true; }   // ⏪
+      if (k === 228 || k === 417) { seekBy(SEEK_STEP * 3); return true; }    // ⏩
+    }
+    if (k === 70 && !e.repeat) {   // F
+      toggleFullscreen();
+      return true;
+    }
+    if (!isFullscreen()) {
+      if ((k === 13 || k === 23) && document.activeElement === box) {   // OK на плеере — во весь экран
+        toggleFullscreen();
+        return true;
+      }
+      return false;
+    }
+    if (controlsVisible() && controls.contains(document.activeElement)) {
+      scheduleHide();
+      return false;   // стрелки и OK — по кнопкам плеера
+    }
+    if (k === 38 || k === 33) { if (handlers.onPrevChannel) handlers.onPrevChannel(); return true; }
+    if (k === 40 || k === 34) { if (handlers.onNextChannel) handlers.onNextChannel(); return true; }
+    if (k === 37) { seekBy(-SEEK_STEP); showControls(); return true; }
+    if (k === 39) { seekBy(SEEK_STEP); showControls(); return true; }
+    if (k === 13 || k === 23) {
+      if (e.repeat) return true;
       showControls();
-    });
+      if (MD.nav) MD.nav.focus(els['ctl-play']);
+      return true;
+    }
+    return false;
+  }
+
+  /** Медиакнопки пульта (из приложения). true — обработано. */
+  function media(name) {
+    if (!session) return false;
+    if (name === 'playPause') togglePlay();
+    else if (name === 'play') tryPlay();
+    else if (name === 'pause') pause();
+    else if (name === 'rewind') seekBy(-SEEK_STEP * 3);
+    else if (name === 'fastForward') seekBy(SEEK_STEP * 3);
+    else return false;
+    showControls();
+    return true;
+  }
+
+  /** «Назад» во весь экран: сначала спрятать кнопки, потом выйти из полноэкранного режима. */
+  function back() {
+    if (isFullscreen() && controlsVisible() && controls.contains(document.activeElement)) {
+      hideControls(true);
+      try { document.activeElement.blur(); } catch (e) { /* фокус не важен */ }
+      return true;
+    }
+    if (isFullscreen()) {
+      exitFullscreen();
+      return true;
+    }
+    return false;
+  }
+
+  /** Плашка при переключении канала во весь экран: логотип, название, что идёт. */
+  function banner(title, sub, logo) {
+    if (!els.banner) return;
+    els['banner-title'].textContent = title || '';
+    els['banner-sub'].textContent = sub || '';
+    if (logo) els['banner-logo'].src = logo;
+    U.setVisible(els['banner-logo'], !!logo);
+    U.setVisible(els.banner, true);
+    player.classList.add('has-banner');   // заголовок панели управления в это время не нужен
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(function () {
+      U.setVisible(els.banner, false);
+      player.classList.remove('has-banner');
+    }, BANNER_MS);
   }
 
   /** Короткое сообщение внизу плеера, при желании с кнопкой. */
@@ -907,7 +1149,13 @@
     position: function () { return session ? position() : 0; },
     setWindow: setWindow,
     toast: toast,
+    banner: banner,
+    back: back,
+    media: media,
+    suspend: suspend,
+    wake: wake,
     isFullscreen: isFullscreen,
+    toggleFullscreen: toggleFullscreen,
     exitFullscreen: exitFullscreen
   };
 })(window, document);

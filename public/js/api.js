@@ -26,7 +26,9 @@
       if (xhr.status >= 200 && xhr.status < 300 && data) {
         done(null, data);
       } else if (!xhr.status) {
-        done(new Error('Нет связи с сервером mdplayer. Он запущен в Termux?'));
+        done(new Error(window.MDNative
+          ? 'Нет связи с сервером mdplayer. Закройте приложение и откройте снова.'
+          : 'Нет связи с сервером mdplayer. Он запущен в Termux?'));
       } else {
         done(new Error(data && data.error ? data.error : 'Ошибка сервера (' + xhr.status + ')'));
       }

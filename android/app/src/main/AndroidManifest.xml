@@ -3,10 +3,17 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- автообновление: установка скачанного с GitHub mdplayer.apk -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- ТВ-приставки: сенсорный экран не обязателен, leanback — по возможности -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <!-- usesCleartextTraffic: интерфейс открывается с http://127.0.0.1, а потоки IPTV обычно по http -->
     <application
         android:allowBackup="false"
+        android:banner="@drawable/banner"
         android:hardwareAccelerated="true"
         android:icon="@drawable/ic_launcher"
         android:label="mdplayer"
@@ -21,7 +28,16 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+                <!-- значок в лаунчере Android TV -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- отдаёт скачанное обновление установщику пакетов (только cacheDir/updates/mdplayer-*.apk) -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

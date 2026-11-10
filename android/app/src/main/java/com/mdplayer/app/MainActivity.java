@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -44,6 +45,7 @@ public class MainActivity extends Activity {
     private static final String PROJECT = "nodejs-project";
     private static final long START_TIMEOUT_MS = 60000;
     private static final int FILE_REQUEST = 1;
+    private static final long UPDATE_DELAY_MS = 15000;
     private static final int MATCH = FrameLayout.LayoutParams.MATCH_PARENT;
 
     private static boolean nodeStarted = false;   // Node.js можно запустить только один раз за процесс
@@ -62,20 +64,23 @@ public class MainActivity extends Activity {
     private View fullscreenView;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private ValueCallback<Uri[]> fileCallback;
+    private Updater updater;
+    private boolean pageReady;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        startNodeOnce(getApplicationContext());   // первым делом: сервер стартует, пока создаётся WebView
 
         root = new FrameLayout(this);
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(MATCH, MATCH));
         setContentView(root);
+        updater = new Updater(this);
 
         setupWebView();
         showMessage("Запуск mdplayer…");
-        startNodeOnce(getApplicationContext());
         waitForServer();
     }
 
@@ -97,7 +102,17 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (url.startsWith(HOME)) view.clearHistory();   // «Назад» не возвращает к заставке
+                if (!url.startsWith(HOME)) return;
+                view.clearHistory();   // «Назад» не возвращает к заставке
+                if (!pageReady) {
+                    pageReady = true;
+                    ui.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (!isFinishing()) updater.checkAuto();   // не мешаем запуску канала
+                        }
+                    }, UPDATE_DELAY_MS);
+                }
             }
         });
 
@@ -362,10 +377,77 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        /** Плеер во весь экран: скрыть системные панели, на телефоне — повернуть горизонтально. */
+        @JavascriptInterface
+        public void setFullscreen(final boolean on) {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    hideSystemBars(on);
+                    setRequestedOrientation(on ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String appVersion() {
+            return Updater.installedVersion(MainActivity.this);
+        }
+
+        /** Кнопка «Проверить обновления» в настройках. */
+        @JavascriptInterface
+        public void checkUpdate() {
+            ui.post(new Runnable() {
+                @Override
+                public void run() {
+                    updater.check(true);
+                }
+            });
+        }
+    }
+
+    // ---------- Пульт ----------
+
+    /** Кнопки пульта, которых нет у клавиатуры: передаём странице (MD.remote). Стрелки, OK и «Назад» WebView обрабатывает сам. */
+    private static String remoteName(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_CHANNEL_UP: return "channelUp";
+            case KeyEvent.KEYCODE_CHANNEL_DOWN: return "channelDown";
+            case KeyEvent.KEYCODE_LAST_CHANNEL: return "lastChannel";
+            case KeyEvent.KEYCODE_INFO: return "info";
+            case KeyEvent.KEYCODE_GUIDE: return "info";
+            case KeyEvent.KEYCODE_MENU: return "menu";
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE: return "playPause";
+            case KeyEvent.KEYCODE_MEDIA_PLAY: return "play";
+            case KeyEvent.KEYCODE_MEDIA_PAUSE: return "pause";
+            case KeyEvent.KEYCODE_MEDIA_STOP: return "pause";
+            case KeyEvent.KEYCODE_MEDIA_REWIND: return "rewind";
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: return "fastForward";
+            case KeyEvent.KEYCODE_MEDIA_NEXT: return "channelDown";
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS: return "channelUp";
+            default: return null;
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        final String name = remoteName(event.getKeyCode());
+        if (name == null || !pageReady) return super.dispatchKeyEvent(event);
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            web.evaluateJavascript("window.MD && MD.remote ? MD.remote('" + name + "') : false", null);
+        }
+        return true;
+    }
+
+    private void notifyPage(String function) {
+        if (pageReady) web.evaluateJavascript("window.MD && MD." + function + " && MD." + function + "()", null);
     }
 
     @Override
     protected void onPause() {
+        notifyPage("onAppPause");   // плеер останавливает загрузку потока
         super.onPause();
         web.onPause();
     }
@@ -374,6 +456,8 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         web.onResume();
+        notifyPage("onAppResume");   // эфир — снова с эфира, архив — с того же места
+        updater.onResume();
     }
 
     @Override

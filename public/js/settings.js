@@ -45,6 +45,22 @@
     saveBtn.addEventListener('click', save);
     refreshPlaylistBtn.addEventListener('click', function () { refresh('playlist', refreshPlaylistBtn); });
     refreshEpgBtn.addEventListener('click', function () { refresh('epg', refreshEpgBtn); });
+
+    // в приложении: проверка обновлений на GitHub (окна показывает само приложение)
+    var updateBtn = U.byId('check-update');
+    if (window.MDNative && window.MDNative.checkUpdate) {
+      U.setVisible(updateBtn, true);
+      updateBtn.addEventListener('click', function () { window.MDNative.checkUpdate(); });
+    }
+  }
+
+  /** Версия установленного приложения (APK), если страница открыта в нём. */
+  function appVersion() {
+    try {
+      return window.MDNative && window.MDNative.appVersion ? String(window.MDNative.appVersion()) : '';
+    } catch (e) {
+      return '';
+    }
   }
 
   function source() {
@@ -111,7 +127,7 @@
       addRow('Плейлист', pl.state === 'loading' ? 'загрузка…' : pl.message || 'не загружен', pl.state === 'error');
     }
 
-    if (epg.state === 'download' || epg.state === 'parse') {
+    if (epg.state === 'download' || epg.state === 'parse' || epg.state === 'load') {
       addRow('Программа', (epg.message || 'Загрузка') + (epg.progress ? ' (' + epg.progress + '%)' : '') + '…', false);
     } else if (epg.state === 'ready') {
       addRow('Программа', epg.matched + ' из ' + pl.count + ' каналов с программой · ' + fmtDate(epg.updatedAt), false);
@@ -124,7 +140,8 @@
     if (pl.count && epg.state === 'ready' && epg.matched < pl.count) {
       addRow('', 'Если у канала нет названий передач — откройте «Программа» и нажмите «Выбрать программу вручную».', false);
     }
-    U.byId('settings-version').textContent = 'mdplayer v' + (state.version || '');
+    var apk = appVersion();
+    U.byId('settings-version').textContent = 'mdplayer v' + (state.version || '') + (apk ? ' · приложение ' + apk : '');
   }
 
   function showError(text) {

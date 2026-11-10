@@ -1,0 +1,10 @@
+config.json
+config.json.*
+data/
+node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/app/libnode/
+android/app/src/main/assets/

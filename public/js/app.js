@@ -45,7 +45,16 @@
       onPrevChannel: function () { stepChannel(-1); },
       onNextChannel: function () { stepChannel(1); }
     });
-    MD.channels.init({ onSelect: function (id) { playLive(byId[id]); } });
+    MD.channels.init({
+      onSelect: function (id) {
+        // повторный выбор канала, который уже идёт, — смотреть во весь экран (удобно с пульта)
+        if (current && current.id === id && !archiveProg && !MD.player.isFullscreen()) {
+          MD.player.toggleFullscreen();
+          return;
+        }
+        playLive(byId[id]);
+      }
+    });
     MD.epg.init({
       onArchive: openArchive,
       onLive: playLive,
@@ -72,9 +81,19 @@
       failedLogo = nowLogo.getAttribute('src');
       U.setVisible(nowLogo, false);
     };
+    // пульт: пока открыто окно, фокус не выходит за его пределы
+    ['epg-map', 'group-grid', 'settings'].forEach(function (id) {
+      var el = U.byId(id);
+      MD.nav.addLayer(function () { return el.className.indexOf('hidden') === -1 ? el : null; });
+    });
+
     MD.back = back;   // кнопка «Назад» в приложении mdplayer.apk
+    MD.remote = remote;   // кнопки пульта, которые WebView сам не передаёт (каналы, «Инфо»…)
+    MD.onAppPause = MD.player.suspend;
+    MD.onAppResume = MD.player.wake;
 
     setTab(U.storage.get('tab', 'channels'));
+    resumeLastChannel();
     api.state(function (err, st) {
       if (err) {
         MD.channels.message(err.message);
@@ -106,7 +125,7 @@
     }
     epgState = st.epg.state;
 
-    var busy = st.playlist.state === 'loading' || st.epg.state === 'download' || st.epg.state === 'parse';
+    var busy = st.playlist.state === 'loading' || st.epg.state === 'download' || st.epg.state === 'parse' || st.epg.state === 'load';
     clearTimeout(pollTimer);
     if (busy) pollTimer = setTimeout(pollState, BUSY_POLL);
   }
@@ -136,6 +155,7 @@
 
       if (current && byId[current.id]) {
         current = byId[current.id];
+        rememberChannel(current);
         MD.channels.setActive(current.id);
         updateNowbar();
       } else if (!current) {
@@ -166,8 +186,21 @@
   function setCurrent(ch) {
     if (current && current.id !== ch.id) previousId = current.id;
     current = ch;
-    U.storage.set('lastChannel', ch.id);
+    rememberChannel(ch);
     MD.channels.setActive(ch.id);
+  }
+
+  /** Запоминаем канал целиком — при следующем запуске он стартует, не дожидаясь списка каналов. */
+  function rememberChannel(ch) {
+    U.storage.set('lastChannel', ch.id);
+    U.storage.set('lastChannelInfo', { id: ch.id, name: ch.name, logo: ch.logo || '', archive: ch.archive || 0, group: ch.group || '' });
+  }
+
+  /** Быстрый старт: последний канал включается сразу, параллельно с загрузкой списка. */
+  function resumeLastChannel() {
+    var info = U.storage.get('lastChannelInfo', null);
+    if (!info || !info.id || info.id !== U.storage.get('lastChannel', null)) return;
+    playLive(info);
   }
 
   /** Передача канала в момент ts: из загруженной программы или из «сейчас в эфире». */
@@ -192,6 +225,9 @@
     MD.epg.show(ch);
     updateNowbar();
     MD.player.loading();
+
+    liveProg = programmeAt(ch, U.now());
+    if (MD.player.isFullscreen()) showBanner(ch, liveProg);
 
     api.stream(ch.id, function (err, res) {
       if (mySeq !== playSeq) return;
@@ -409,11 +445,38 @@
       MD.settings.close();
       return true;
     }
-    if (MD.player.isFullscreen()) {
-      MD.player.exitFullscreen();
+    if (MD.player.back()) {
+      // вышли из полноэкранного режима — фокус на канал, который смотрели
+      if (!MD.player.isFullscreen() && MD.nav) MD.nav.focusFirst(document);
       return true;
     }
     return false;
+  }
+
+  /** Плашка во весь экран: «Россия 1 · 20:00 Вести». */
+  function showBanner(ch, prog) {
+    var sub = prog ? U.fmtTime(prog[0]) + ' — ' + prog[2] : (nowItems[ch.id] ? U.fmtTime(nowItems[ch.id][1]) + ' — ' + nowItems[ch.id][0] : 'Прямой эфир');
+    MD.player.banner(ch.name, sub, ch.logo && ch.logo !== failedLogo ? ch.logo : '');
+  }
+
+  /**
+   * Кнопки пульта, которые приходят из приложения (MainActivity): каналы ±, «Инфо», «Меню».
+   * true — кнопка обработана.
+   */
+  function remote(name) {
+    if (name === 'channelUp') stepChannel(-1);
+    else if (name === 'channelDown') stepChannel(1);
+    else if (name === 'lastChannel') {
+      if (previousId && byId[previousId]) playLive(byId[previousId]);
+    } else if (name === 'info') {
+      if (current) showBanner(current, archiveProg || programmeAt(current, U.now()));
+    } else if (name === 'menu') {
+      if (MD.player.isFullscreen()) MD.player.exitFullscreen();
+      else openSettings();
+    } else {
+      return MD.player.media(name);   // playPause, play, pause, rewind, fastForward
+    }
+    return true;
   }
 
   init();

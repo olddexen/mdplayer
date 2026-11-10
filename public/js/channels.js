@@ -159,6 +159,7 @@
   function renderRow(ch) {
     var row = U.el('div', 'ch' + (ch.id === activeId ? ' active' : ''));
     row.setAttribute('data-id', ch.id);
+    row.setAttribute('tabindex', '0');   // пульт: строку можно выбрать стрелками и нажать OK
 
     var logo = U.el('div', 'ch-logo');
     if (ch.logo) {

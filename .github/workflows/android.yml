@@ -38,6 +38,9 @@ jobs:
       - name: Версия из package.json
         run: echo "APP_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
 
+      - name: Тесты сервера
+        run: node --test test/*.test.js
+
       - name: Проверить, что сервер mdplayer запускается
         run: |
           for f in server.js lib/*.js public/js/*.js; do node --check "$f"; done
@@ -132,7 +135,8 @@ jobs:
           tag_name: v${{ env.APP_VERSION }}-build${{ github.run_number }}
           name: mdplayer v${{ env.APP_VERSION }} (сборка ${{ github.run_number }})
           body: |
-            APK для Android 7–14 (в том числе Android 8). Скачайте **mdplayer.apk** ниже и установите на телефон
-            поверх прежней версии — настройки и избранное сохранятся. Termux для этой версии не нужен.
+            mdplayer для Android 7–14 (телефоны и ТВ-приставки). Начиная с версии 1.2 приложение обновляется само:
+            предлагает новую версию при запуске или по кнопке «Настройки → Проверить обновления».
+            Вручную: скачайте mdplayer.apk ниже и установите поверх — настройки и избранное сохранятся.
           files: mdplayer.apk
           make_latest: true

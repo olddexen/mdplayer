@@ -15,10 +15,20 @@
 
   <div class="top">
     <div id="player" class="player">
-      <div id="player-box" class="player-box">
-        <video id="video" playsinline webkit-playsinline preload="none"></video>
+      <div id="player-box" class="player-box" tabindex="0">
+        <!-- прозрачный постер: иначе WebView рисует большую серую кнопку «▶» на время подключения -->
+        <video id="video" playsinline webkit-playsinline preload="none" poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video>
         <div id="dimmer" class="dimmer"></div>
         <div id="gesture" class="gesture"></div>
+        <div id="buffering" class="buffering hidden"><div class="spinner"></div></div>
+
+        <div id="banner" class="banner hidden">
+          <img id="banner-logo" class="banner-logo hidden" alt="">
+          <div class="banner-text">
+            <div id="banner-title" class="banner-title"></div>
+            <div id="banner-sub" class="banner-sub"></div>
+          </div>
+        </div>
 
         <div id="controls" class="controls ctl-hidden">
           <div class="ctl-top"><div id="ctl-title" class="ctl-title"></div></div>
@@ -200,12 +210,16 @@
       <button id="refresh-epg" class="btn" type="button">Обновить программу</button>
     </div>
     <p id="settings-version" class="hint version"></p>
+    <div class="buttons center">
+      <button id="check-update" class="btn hidden" type="button">Проверить обновления</button>
+    </div>
   </div>
 </div>
 
 <script src="vendor/hls.min.js"></script>
 <script>window.Hls || document.write('<script src="https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js"><\/script>');</script>
 <script src="js/util.js"></script>
+<script src="js/nav.js"></script>
 <script src="js/api.js"></script>
 <script src="js/player.js"></script>
 <script src="js/channels.js"></script>

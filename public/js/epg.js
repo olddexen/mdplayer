@@ -108,7 +108,7 @@
       note = '';
 
       if (!programmes.length) {
-        var busy = res.epg.state === 'download' || res.epg.state === 'parse';
+        var busy = res.epg.state === 'download' || res.epg.state === 'parse' || res.epg.state === 'load';
         if (busy) loadedAt = 0;   // перезапросим, когда EPG загрузится
         if (!ch.archive) {
           U.clear(daysEl);
@@ -200,6 +200,7 @@
 
     var row = U.el('div', cls);
     row.setAttribute('data-index', index);
+    if (archive || live) row.setAttribute('tabindex', '0');   // пульт: передачу можно открыть кнопкой OK
     row.appendChild(U.el('div', 'pr-time', U.fmtTime(p[0])));
 
     var body = U.el('div', 'pr-body');
