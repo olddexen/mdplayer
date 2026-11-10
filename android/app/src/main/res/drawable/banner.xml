@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Баннер для ТВ-лаунчера (Android TV / приставки): 16:9, тот же значок, что у приложения -->
+<!-- Баннер для ТВ-лаунчера (Android TV / приставки): 16:9, телевизор на жёлто-оранжевом фоне -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
-    <path
-        android:fillColor="#161B22"
-        android:pathData="M0,0h320v180h-320z" />
-    <path
-        android:fillColor="#3B82F6"
-        android:pathData="M160,40a50,50 0,1 1,0 100a50,50 0,1 1,0 -100z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M148,68L184,90L148,112Z" />
+    <path android:fillColor="#FFB300" android:pathData="M0,0h320v180h-320z" />
+    <group android:translateX="106" android:translateY="36">
+        <path android:strokeColor="#1B2230" android:strokeWidth="3.5" android:strokeLineCap="round" android:pathData="M54,40L42,26M54,40L66,26" />
+        <path android:fillColor="#1B2230" android:pathData="M42,23a3,3 0,1 1,0 6a3,3 0,1 1,0 -6zM66,23a3,3 0,1 1,0 6a3,3 0,1 1,0 -6z" />
+        <path android:fillColor="#1B2230" android:pathData="M30,40h48a6,6 0,0 1,6 6v28a6,6 0,0 1,-6 6h-48a6,6 0,0 1,-6 -6v-28a6,6 0,0 1,6 -6zM34,80h6v4h-6zM68,80h6v4h-6z" />
+        <path android:fillColor="#FFC53D" android:pathData="M34,45h30a3,3 0,0 1,3 3v24a3,3 0,0 1,-3 3h-30a3,3 0,0 1,-3 -3v-24a3,3 0,0 1,3 -3zM75,47a3,3 0,1 1,0 6a3,3 0,1 1,0 -6zM75,56a3,3 0,1 1,0 6a3,3 0,1 1,0 -6zM72,67h6v3h-6z" />
+        <path android:fillColor="#1B2230" android:pathData="M44,52L57,60L44,68Z" />
+    </group>
 </vector>

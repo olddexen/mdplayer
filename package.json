@@ -1,6 +1,6 @@
 {
   "name": "mdplayer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Веб-плеер онлайн-ТВ и архива передач для iEdem TV (Edem / iLook): Node.js-сервер для Android (Termux)",
   "main": "server.js",
   "private": true,
