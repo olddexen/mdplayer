@@ -147,8 +147,7 @@ final class Updater {
         String notes = release.notes.length() > 700 ? release.notes.substring(0, 700) + "…" : release.notes;
         String message = "Версия " + release.version + (release.build > 0 ? " (сборка " + release.build + ")" : "")
                 + "\nУстановлена: " + installedVersion(activity)
-                + (notes.isEmpty() ? "" : "\n\n" + notes)
-                + "\n\nНастройки, избранное и программа передач сохранятся.";
+                + (notes.isEmpty() ? "\n\nНастройки, избранное и программа передач сохранятся." : "\n\n" + notes);
         AlertDialog dialog = new AlertDialog.Builder(activity, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
                 .setTitle("Доступно обновление mdplayer")
                 .setMessage(message)
@@ -159,7 +158,9 @@ final class Updater {
                         .apply())
                 .create();
         dialog.show();
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).requestFocus();   // пульт: OK сразу на «Обновить»
+        // пульт: OK сразу нажимает «Обновить». Обычный requestFocus() в «сенсорном» режиме не работает,
+        // и первое нажатие OK лишь подсвечивало «Позже».
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).requestFocusFromTouch();
     }
 
     private void download(final Release release) {
