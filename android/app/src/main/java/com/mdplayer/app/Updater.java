@@ -45,6 +45,7 @@ final class Updater {
     private static final long AUTO_INTERVAL_MS = 6 * 3600 * 1000L;   // автопроверка не чаще раза в 6 часов
     private static final long SNOOZE_MS = 3 * 24 * 3600 * 1000L;     // «Позже» — не напоминать 3 дня
     private static final int TIMEOUT_MS = 20000;
+    private static final int DOWNLOAD_ATTEMPTS = 6;
 
     /** Опубликованная версия. */
     static final class Release {
@@ -210,16 +211,56 @@ final class Updater {
         File target = new File(dir, "mdplayer-" + release.version.replaceAll("[^0-9.]", "") + "-" + release.build + ".apk");
         File part = new File(dir, target.getName() + ".part");
 
+        // APK весит ~100 МБ, а связь с GitHub рвётся: докачиваем с места обрыва (Range)
+        IOException last = null;
+        for (int attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+            if (cancelled[0]) throw new IOException("отменено");
+            try {
+                saveChunk(release, part, progress, cancelled);
+                if (release.size <= 0 || part.length() == release.size) {
+                    last = null;
+                    break;
+                }
+                last = new IOException("файл скачался не полностью");
+            } catch (IOException e) {
+                if (cancelled[0]) throw e;
+                last = e;
+            }
+            try {
+                Thread.sleep(2000L * attempt);
+            } catch (InterruptedException e) {
+                throw new IOException("прервано");
+            }
+        }
+        if (last != null) {
+            part.delete();
+            throw new IOException(last.getMessage() + ", попробуйте ещё раз");
+        }
+        if (!part.renameTo(target)) throw new IOException("не удалось сохранить файл");
+        return target;
+    }
+
+    /** Одна попытка: дописывает файл с его текущей длины (или сначала, если сервер не умеет докачку). */
+    private void saveChunk(Release release, File part, final ProgressDialog progress, boolean[] cancelled) throws IOException {
+        long have = part.isFile() ? part.length() : 0;
+        if (release.size > 0 && have > release.size) {   // испорченный остаток — сначала
+            part.delete();
+            have = 0;
+        }
         HttpURLConnection c = open(release.apkUrl);
+        if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
         try {
             int code = c.getResponseCode();
-            if (code != 200) throw new IOException("HTTP " + code);
-            long total = c.getContentLength() > 0 ? c.getContentLength() : release.size;
+            boolean append = code == 206 && have > 0;
+            if (code == 416 && have > 0 && have == release.size) return;   // уже скачан целиком
+            if (code != 200 && code != 206) throw new IOException("HTTP " + code);
+            if (!append) have = 0;
+            long total = release.size > 0 ? release.size : have + Math.max(0, c.getContentLength());
             InputStream in = c.getInputStream();
-            OutputStream out = new FileOutputStream(part);
+            OutputStream out = new FileOutputStream(part, append);
             try {
                 byte[] buf = new byte[64 * 1024];
-                long done = 0;
+                long done = have;
                 int lastPct = -1;
                 int n;
                 while ((n = in.read(buf)) > 0) {
@@ -239,12 +280,6 @@ final class Updater {
         } finally {
             c.disconnect();
         }
-        if (release.size > 0 && part.length() != release.size) {
-            part.delete();
-            throw new IOException("файл скачался не полностью, попробуйте ещё раз");
-        }
-        if (!part.renameTo(target)) throw new IOException("не удалось сохранить файл");
-        return target;
     }
 
     /** Установка: на Android 8+ нужно разрешение «Установка неизвестных приложений» для mdplayer. */
